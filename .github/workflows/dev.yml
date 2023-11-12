@@ -18,7 +18,7 @@ jobs:
         script: |
           cd /home/taxedme-build/api
           git add . && git commit -m 'update server'
-          git pull origin beta --no-edit --force --allow-unrelated-histories
+          git pull origin dev --no-edit --force --allow-unrelated-histories
           npm install
           npm run build
           composer install --no-dev
