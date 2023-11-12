@@ -2,6 +2,14 @@
 
 use Illuminate\Support\Str;
 
+$sub = null;
+
+if (isset($_SERVER['HTTP_HOST'])) {
+    $sub = explode('.', $_SERVER['HTTP_HOST']);
+    $sub = array_shift($sub);
+}
+
+
 return [
 
     /*
@@ -31,7 +39,7 @@ return [
     |
     */
 
-    'lifetime' => env('SESSION_LIFETIME', 1440),
+    'lifetime' => env('SESSION_LIFETIME', 2),
 
     'expire_on_close' => false,
 
@@ -128,7 +136,7 @@ return [
 
     'cookie' => env(
         'SESSION_COOKIE',
-        Str::slug(env('APP_NAME', 'laravel'), '_').'_session'
+        ($sub ?? 'klookin') . '_session'
     ),
 
     /*
@@ -155,7 +163,7 @@ return [
     |
     */
 
-    'domain' => '.' . env('SESSION_DOMAIN'),
+    'domain' => '.' . env('SESSION_DOMAIN', 'test.co'),
 
     /*
     |--------------------------------------------------------------------------
@@ -181,7 +189,7 @@ return [
     |
     */
 
-    'http_only' => false,
+    'http_only' => true,
 
     /*
     |--------------------------------------------------------------------------
