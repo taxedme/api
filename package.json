@@ -2,6 +2,7 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "push": "git commitAndPush",
         "dev": "vite ",
         "build": "vite build"
     },
