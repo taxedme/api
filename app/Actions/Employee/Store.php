@@ -16,8 +16,13 @@ class Store implements RouteServiceInterface
     public function execute()
     {
         try {
-            $employee = Auth::user()->employees();            
-            return response()->apiSuccess($employee->create($this->request->validated()));
+            $employee = Auth::user()->employees();
+
+            $data = $this->request->validated();
+            $data['salary'] = (float) $data['salary'];
+
+
+            return response()->apiSuccess($employee->create($data));
         } catch (\Exception $e) {
             return response()->apiError($e->getMessage());
         }
