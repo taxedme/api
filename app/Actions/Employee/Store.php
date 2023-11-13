@@ -19,7 +19,7 @@ class Store implements RouteServiceInterface
             $employee = Auth::user()->employees();
 
             $data = $this->request->validated();
-            $data['salary'] = (float) $data['salary'];
+            $data['salary'] = (float) str_replace(',', '', $data['salary']);
 
 
             return response()->apiSuccess($employee->create($data));
