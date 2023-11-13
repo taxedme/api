@@ -136,7 +136,7 @@ return [
 
     'cookie' => env(
         'SESSION_COOKIE',
-        ($sub ?? 'klookin') . '_session'
+        ($sub ?? 'taxedme') . '_session'
     ),
 
     /*
@@ -176,7 +176,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    'secure' => true,
 
     /*
     |--------------------------------------------------------------------------
@@ -204,6 +204,6 @@ return [
     |
     */
 
-    'same_site' => 'lax',
+    'same_site' => 'strict',
 
 ];

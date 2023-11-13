@@ -24,7 +24,7 @@ class EmployeeCreateRequest extends FormRequest
         return [
             "organization_id" => "required",
             "names"   => "required",
-            "salary"  => "numeric",
+            "salary"  => "required",
             "months"  => "lte:12|gte:1"
         ];
     }
