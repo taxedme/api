@@ -138,7 +138,7 @@ class Calculate implements RouteServiceInterface
                 }
 
                 // Taxable
-                $taxable = ($this->user[$k]["total_pay"] - $exemptions->subtract($exemptions) - $this->user[$k]["consolidated"]);
+                $taxable = ($this->user[$k]["total_pay"] - $this->user[$k]["pension"] - $this->user[$k]["nhf"] - $this->user[$k]["nhis"] - $this->user[$k]["gratuities"] - $this->user[$k]["life_insurance"] - $this->user[$k]["consolidated"]);
 
                 // Derive taxable Income
                 $fir = (300000 / 100) * 7;
@@ -180,7 +180,7 @@ class Calculate implements RouteServiceInterface
                     }
 
                     $taxableIncome = ($taxableIncome / 100) * $lastPercent;
-                    $this->user[$k]["tax_payable"] = $this->cast(($taxableIncome + $standardPercent));
+                    $this->user[$k]["tax_payable"] = $taxableIncome + $standardPercent;
                 }
             } else {
                 $this->user[$k]["consolidated"] = 0;
