@@ -9,20 +9,10 @@ use Illuminate\Support\Facades\Validator;
 trait SettingsTrait
 {
     protected $exemptions = [
-        "pension" => [
-            "percent" => 8,
-            "status" => 1
-        ],
-        "nhis" => [
-            "percent" => 5,
-            "status" => 1
-        ],
-        "nhf" => [
-            "percent" => 2.5,
-            "status" => 1
-        ],
-        "gratuities" => 0,
-        "life_insurance" => 0
+        "pension" => 0,
+        "nhis" => 0,
+        "nhf" => 0,
+        "save_on_update" => 0
     ];
 
     public function set(Request $request, Setting $setting)
@@ -32,35 +22,14 @@ trait SettingsTrait
 
     public function exemptions($setting)
     {
-        $value = collect(request()->value);
-        Validator::make($value->toArray(), [
-            "pension" => "array",
-            "pension.status" => "lte:1|gte:0",
-            "nhis" => "array",
-            "nhis.status" => "lte:1|gte:0",
-            "nhf" => "array",
-            "nhf.status" => "lte:1|gte:0",
-            "gratuities" => "integer",
-            "life_insurance" => "integer"
+        Validator::make(request()->value, [
+            "pension" => "numeric",
+            "hmo" => "numeric",
+            "nhf" => "numeric",
+            "save_on_update" => "boolean"
         ])->validate();
 
-        if (isset($value['pension']) && isset($value['pension']['status'])) {
-            $this->exemptions['pension']['status'] = $value['pension']['status'];
-        }
-        if (isset($value['nhis']) && isset($value['nhis']['status'])) {
-            $this->exemptions['nhis']['status'] = $value['nhis']['status'];
-        }
-        if (isset($value['nhf']) && isset($value['nhf']['status'])) {
-            $this->exemptions['nhf']['status'] = $value['nhf']['status'];
-        }
-        if (isset($value['gratuities'])) {
-            $this->exemptions['gratuities'] = $value['gratuities'];
-        }
-        if (isset($value['life_insurance'])) {
-            $this->exemptions['life_insurance'] = $value['life_insurance'];
-        }
-
-        $setting->value = $this->exemptions;
+        $setting->value = collect(json_decode($setting->value))->merge(request()->value);
         $setting->save();
         return $setting;
     }

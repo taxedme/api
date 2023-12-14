@@ -53,152 +53,86 @@ class Calculate implements RouteServiceInterface
 
         $this->exemptions = json_decode($exemptions->value);
 
+        $this->employee = Auth::user()
+            ->employees()
+            ->where('organization_id', $this->request->organization_id)
+            ->get();
+
         if ($this->request->employee_id) {
-
-            $fetch = Auth::user()
-                ->employees()
-                ->where('organization_id', $this->request->organization_id)
-                ->where('employees.id', $this->request->employee_id)
-                ->first();
-
-
-            if ($fetch) {
-                $this->employee[] = ($fetch);
-            }
-
-            if ($this->request->has('pension')) {
-                $this->exemptions->pension->status = $this->request->pension;
-            }
-            if ($this->request->has('nhf')) {
-                $this->exemptions->nhf->status = $this->request->nhf;
-            }
-            if ($this->request->has('nhis')) {
-                $this->exemptions->nhis->status = $this->request->nhis;
-            }
-            if ($this->request->has('gratuities')) {
-                $this->exemptions->gratuities = $this->request->gratuities;
-            }
-            if ($this->request->has('life_insurance')) {
-                $this->exemptions->life_insurance = $this->request->life_insurance;
-            }
-        } else {
-            $this->employee = Auth::user()
-                ->employees()
-                ->where('organization_id', $this->request->organization_id)
-                ->get();
+            $fetch = $this->employee->firstWhere('id', $this->request->employee_id);
+            $this->employee = $fetch ? [$fetch] : [];
         }
 
-        if (collect($this->employee)->count() < 1) {
+        if (collect($this->employee)->isEmpty()) {
             return response()->apiSuccess([]);
         }
-
+       
         return response()->apiSuccess($this->calculator());
     }
 
 
+
+    public function float(int|float $n)
+    {
+        return number_format((float) $n, 2, '.', '');
+    }
+
     public function calculator()
     {
+        $em = [];
+
         foreach ($this->employee as $k => $v) {
-
-            // prerequisites
-            $this->user[$k]["id"] = $v->id;
-            $this->user[$k]["names"] = $v->names;
-            $this->user[$k]["salary"] = $this->cast($this->request->salary ?? $v->salary);
-            $this->user[$k]["months"] = $this->cast($this->request->months ?? 12);
-            $this->user[$k]["total_pay"] = ($this->cast($this->user[$k]["salary"]) * $this->user[$k]["months"]);
+            $em[$k]["id"] = $v->id;
+            $em[$k]["names"] = $this->request->names ?? $v->names;
 
 
-            // Exemptions
-            $this->user[$k]["pension"] = $this->exemptions->pension->status ? ($this->user[$k]["total_pay"] / 100) * $this->exemptions->pension->percent : 0;
-            $this->user[$k]["nhf"] = $this->exemptions->nhf->status ? ($this->user[$k]["total_pay"] / 100) * $this->exemptions->nhf->percent : 0;
-            $this->user[$k]["nhis"] = $this->exemptions->nhis->status ? ($this->user[$k]["total_pay"] / 100) * $this->exemptions->nhis->percent : 0;
-            $this->user[$k]["gratuities"] = $this->exemptions->gratuities > 0 ? ($this->user[$k]["total_pay"] / 100) * $this->exemptions->gratuities : 0;
-            $this->user[$k]["life_insurance"] = $this->exemptions->life_insurance > 0 ? ($this->user[$k]["total_pay"] / 100) * $this->exemptions->life_insurance : 0;
+            $em[$k]["months"] = $this->request->months ?? 12;
+            $em[$k]['salary'] = $this->float($this->request->salary ?? $v->salary);
 
-            $exemptions = collect([
-                $this->user[$k]["pension"],
-                $this->user[$k]["nhf"],
-                $this->user[$k]["nhis"],
-                $this->user[$k]["gratuities"],
-                $this->user[$k]["life_insurance"]
-            ]);
+            $em[$k]['total_pay'] = $em[$k]['salary'] * $em[$k]["months"];
+            $em[$k]['salary_grossed_up'] = $this->float(($em[$k]['total_pay'] / $em[$k]["months"]) * 12);
 
-            // Derive earned income
-            $this->user[$k]["earned_income"] = $this->user[$k]["total_pay"] - $exemptions->sum();
+            // preloaded exemptions
+            $em[$k]['nhf'] = $this->float($this->request->nhf ?? $this->exemptions->nhf);
+            $em[$k]['hmo'] = $this->float($this->request->hmo ?? $this->exemptions->hmo);
+            $em[$k]['pension'] = $this->float($this->request->pension ?? $this->exemptions->pension);
+
+            $em[$k]['nhf_grossed_up'] = ($em[$k]['nhf'] / $em[$k]["months"]) * 12;
+            $em[$k]['hmo_grossed_up'] = ($em[$k]['hmo'] / $em[$k]["months"]) * 12;
 
 
-            // Computation based on salary 
-            if ($this->user[$k]["salary"] > 30000 && $this->user[$k]["salary"] !== 30000) {
 
-                // consolidated allowance
-                if (($this->user[$k]["earned_income"] / 100) * 1 > 200000) {
-                    $this->user[$k]["consolidated"] = ((($this->user[$k]["earned_income"] / 100) * 1)) + (($this->user[$k]["earned_income"] / 100) * 20);
-                } else {
-                    $this->user[$k]["consolidated"] = 200000 + (($this->user[$k]["earned_income"] / 100) * 20);
-                }
+            // // Pension
+            $em[$k]['computed_pension'] = $this->float($em[$k]['total_pay'] * 8);
+            $em[$k]['allowed_pension'] = ($em[$k]['pension'] <= $em[$k]['computed_pension'] ? $em[$k]['pension'] : $em[$k]['computed_pension']);
+            $em[$k]['allowed_pension_grossed_up'] = $this->float(($em[$k]['allowed_pension'] / $em[$k]["months"]) * 12);
 
-                // Taxable
-                $taxable = ($this->user[$k]["total_pay"] - $this->user[$k]["pension"] - $this->user[$k]["nhf"] - $this->user[$k]["nhis"] - $this->user[$k]["gratuities"] - $this->user[$k]["life_insurance"] - $this->user[$k]["consolidated"]);
 
-                // Derive taxable Income
-                $fir = (300000 / 100) * 7;
-                $sec = (300000 / 100) * 11;
-                $thi = (500000 / 100) * 15;
-                $fou = (500000 / 100) * 19;
-                $fiv = (1600000 / 100) * 21;
+            //CRA
+            $em[$k]['cra1'] = $this->float($em[$k]['salary_grossed_up'] <= 20000000 ? 200000 : ($em[$k]['salary_grossed_up'] / 100) * 1);
+            $em[$k]['cra2'] = $this->float(((($em[$k]['salary_grossed_up'] - $em[$k]['allowed_pension_grossed_up'] - $em[$k]['nhf_grossed_up'] - $em[$k]['hmo_grossed_up'])) / 100) * 20);
 
-                if ($taxable < 300000) {
-                    $this->user[$k]["tax_payable"] = ($taxable / 100) * 7;
-                } else {
 
-                    $lastPercent = 11;
-                    $standardPercent = $fir;
-                    $taxableIncome = $taxable - 300000;
+            $em[$k]['total_reliefs'] = $this->float($em[$k]['cra1'] + $em[$k]['cra2'] + $em[$k]['allowed_pension_grossed_up'] + $em[$k]['nhf_grossed_up'] + $em[$k]['hmo_grossed_up']);
+            $em[$k]['taxable_income'] = $this->float($em[$k]['salary_grossed_up'] - $em[$k]['total_reliefs']);
 
-                    if ($taxableIncome > 300000) {
-                        $lastPercent = 15;
-                        $taxableIncome = $taxableIncome - 300000;
-                        $standardPercent += $sec;
-                    }
 
-                    if ($taxableIncome > 500000) {
-                        $lastPercent = 19;
-                        $taxableIncome = $taxableIncome - 500000;
-                        $standardPercent += $thi;
-                    }
 
-                    if ($taxableIncome > 500000) {
-                        $lastPercent = 21;
-                        $taxableIncome = $taxableIncome - 500000;
-                        $standardPercent += $fou;
-                    }
+            $em[$k]['first_300'] = $this->float(($em[$k]['taxable_income'] > 0 ? (($em[$k]['taxable_income'] > 300000 / 12 * $em[$k]["months"]) ? 300000 / 12 * $em[$k]["months"] : $em[$k]['taxable_income']) : 0) * 0.07);
+            $em[$k]['next_300'] = $this->float((($em[$k]['taxable_income'] - (300000 / 12 * $em[$k]["months"]) > 300000 / 12 * $em[$k]["months"]) ? 300000 / 12 * $em[$k]["months"] : (($em[$k]['taxable_income'] - (300000 / 12 * $em[$k]["months"]) > 0) ? $em[$k]['taxable_income'] - (300000 / 12 * $em[$k]["months"]) : 0)) * 0.11);
+            $em[$k]['first_500'] = $this->float(($em[$k]['taxable_income'] - (600000 / 12 * $em[$k]["months"]) > 500000 / 12 * $em[$k]["months"] ? 500000 / 12 * $em[$k]["months"] : ($em[$k]['taxable_income'] - (600000 / 12 * $em[$k]["months"]) > 0 ? $em[$k]['taxable_income'] - (600000 / 12 * 12) : 0)) * 0.15);
+            $em[$k]['next_500'] = $this->float(($em[$k]['taxable_income'] - (1100000 / 12 * $em[$k]["months"]) > 500000 / 12 * $em[$k]["months"] ? 500000 / 12 * $em[$k]["months"] : ($em[$k]['taxable_income'] - (1100000 / 12 * $em[$k]["months"]) > 0 ? $em[$k]['taxable_income'] - (1100000 / 12 * $em[$k]["months"]) : 0)) * 0.19);
+            $em[$k]['next_1600'] = $this->float(($em[$k]['taxable_income'] - (1600000 / 12 * $em[$k]["months"]) > 1600000 / 12 * $em[$k]["months"] ? 1600000 / 12 * $em[$k]["months"] : ($em[$k]['taxable_income'] - (1600000 / 12 * $em[$k]["months"]) > 0 ? $em[$k]['taxable_income'] - (1600000 / 12 * $em[$k]["months"]) : 0)) * 0.21);
 
-                    if ($taxableIncome > 1600000) {
-                        $lastPercent = 24;
-                        $taxableIncome = $taxableIncome - 1600000;
-                        $standardPercent += $fiv;
-                    }
+            $em[$k]['balance'] = $this->float(($em[$k]['taxable_income'] - (300000 / 12 * $em[$k]["months"]) - (300000 / 12 * $em[$k]["months"]) - (500000 / 12 * $em[$k]["months"]) - (500000 / 12 * $em[$k]["months"]) - (1600000 / 12 * $em[$k]["months"])) > 0 ? (($em[$k]['taxable_income'] - (300000 / 12 * $em[$k]["months"]) - (300000 / 12 * $em[$k]["months"]) - (500000 / 12 * $em[$k]["months"]) - (500000 / 12 * $em[$k]["months"]) - (1600000 / 12 * $em[$k]["months"]))) * 0.24 : 0);
+            $em[$k]['annual_tax_payable'] = $this->float(array_sum([$em[$k]['first_300'], $em[$k]['next_300'], $em[$k]['first_500'], $em[$k]['next_500'], $em[$k]['next_1600'], $em[$k]['balance']]));
 
-                    $taxableIncome = ($taxableIncome / 100) * $lastPercent;
-                    $this->user[$k]["tax_payable"] = $taxableIncome + $standardPercent;
-                }
-            } else {
-                $this->user[$k]["consolidated"] = 0;
-                $this->user[$k]["earned_income"] = 0;
-                $this->user[$k]["tax_payable"] = 0;
-            }
-
-            $this->user[$k]["exemptions"] = [
-                "nhf" => $this->exemptions->nhf->status,
-                "nhis" => $this->exemptions->nhis->status,
-                "pension" => $this->exemptions->pension->status,
-                "gratuities" => $this->exemptions->gratuities,
-                "life_insurance" => $this->exemptions->life_insurance
-            ];
+            $em[$k]['pro_rated_tax_payable'] = $this->float(($em[$k]['annual_tax_payable'] / 12) * $em[$k]["months"]);
+            $em[$k]['final_pro_rated_tax_payable'] = $this->float($em[$k]['salary_grossed_up'] <= 360000 ? 0 : $em[$k]['pro_rated_tax_payable']);
 
         }
 
-        return $this->user;
 
+        return $em;
     }
 }
