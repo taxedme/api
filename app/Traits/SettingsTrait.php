@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Validator;
 
 trait SettingsTrait
 {
-    protected $exemptions = [
+    public $exemptions = [
         "pension" => 0,
-        "nhis" => 0,
+        "hmo" => 0,
         "nhf" => 0,
         "save_on_update" => 0
     ];

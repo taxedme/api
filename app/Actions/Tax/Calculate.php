@@ -43,15 +43,22 @@ class Calculate implements RouteServiceInterface
     public function execute()
     {
 
-        $exemptions = Setting::where('organization_id', $this->request->organization_id)
+        $settings = Setting::where('organization_id', $this->request->organization_id)
             ->where('key', "exemptions")
             ->first();
 
-        if (!$exemptions) {
-            $exemptions = $this->generateSettings("exemptions", $this->request->organization_id);
+        if (!$settings) {
+            $settings = $this->generateSettings("exemptions", $this->request->organization_id);
         }
 
-        $this->exemptions = json_decode($exemptions->value);
+        $exemptions = json_decode($settings->value);
+
+        if (collect($exemptions)->intersectByKeys($this->exemptions)->count() != count($this->exemptions)) {
+            $settings->value = collect($this->exemptions);
+            $settings->save();
+
+            $exemptions = json_decode($settings->value);
+        }
 
         $this->employee = Auth::user()
             ->employees()
@@ -66,8 +73,8 @@ class Calculate implements RouteServiceInterface
         if (collect($this->employee)->isEmpty()) {
             return response()->apiSuccess([]);
         }
-       
-        return response()->apiSuccess($this->calculator());
+
+        return response()->apiSuccess($this->calculator($exemptions));
     }
 
 
@@ -77,7 +84,7 @@ class Calculate implements RouteServiceInterface
         return number_format((float) $n, 2, '.', '');
     }
 
-    public function calculator()
+    public function calculator($exemptions)
     {
         $em = [];
 
@@ -93,9 +100,9 @@ class Calculate implements RouteServiceInterface
             $em[$k]['salary_grossed_up'] = $this->float(($em[$k]['total_pay'] / $em[$k]["months"]) * 12);
 
             // preloaded exemptions
-            $em[$k]['nhf'] = $this->float($this->request->nhf ?? $this->exemptions->nhf);
-            $em[$k]['hmo'] = $this->float($this->request->hmo ?? $this->exemptions->hmo);
-            $em[$k]['pension'] = $this->float($this->request->pension ?? $this->exemptions->pension);
+            $em[$k]['nhf'] = $this->float($this->request->nhf ?? $exemptions->nhf);
+            $em[$k]['hmo'] = $this->float($this->request->hmo ?? $exemptions->hmo);
+            $em[$k]['pension'] = $this->float($this->request->pension ?? $exemptions->pension);
 
             $em[$k]['nhf_grossed_up'] = ($em[$k]['nhf'] / $em[$k]["months"]) * 12;
             $em[$k]['hmo_grossed_up'] = ($em[$k]['hmo'] / $em[$k]["months"]) * 12;
